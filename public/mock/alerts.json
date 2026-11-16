@@ -1,0 +1,1 @@
+[{"id":"A1","severity":"심각","node":"g_DGT","terminal":"DGT","title":"DGT 게이트 대기열 · 공공도로 넘침","since":"11:50","duration":"2시간 40분","diagnosis":true},{"id":"A2","severity":"주의","node":"g_BNCT","terminal":"BNCT","title":"BNCT 게이트 대기 증가","since":"13:50","duration":"40분","diagnosis":false,"brief":{"cause":"게이트 처리 저하","usualThr":[72,90],"verdict":"관찰 · 30분 후 재평가"}}]
