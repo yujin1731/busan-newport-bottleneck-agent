@@ -51,7 +51,6 @@ function ApproveModal() {
       <section className="rm ap card" role="dialog" aria-modal="true" aria-label="승인">
         <button ref={closeRef} className="rm-close ap-close" onClick={() => go(3)} aria-label="닫기"><Icon name="x" size={18} /></button>
         <S4 />
-        <HomeIcon />
       </section>
     </div>
   );
@@ -163,53 +162,80 @@ function S4() {
   const set = useUI((s) => s.set);
   const decision = useUI((s) => s.decision);
   const history = useUI((s) => s.history);
-  const simCand = useUI((s) => s.simCand);
+  const go = useUI((s) => s.go);
   const a = useActiveAction();
+  const [sent, setSent] = useState<Record<number, boolean>>({}); // 보낸 절차
+  const [pick, setPick] = useState<Record<number, boolean>>({}); // 체크한 절차
   const now = () => new Date().toTimeString().slice(0, 5);
 
-  // 승인 창의 중심: 우리가 무엇을 할 것인가를 한 문장으로
-  const kind = data.cands.candidates.find((c) => c.id === simCand)?.kind;
-  const [from, to] = a.title.split(' → ');
-  const detail = /\((.+?)\)/.exec(a.title)?.[1] ?? '';
-  const vol = `${a.volume.value.toLocaleString()} ${a.volume.unit}`;
-  const doing: React.ReactNode = kind === 'transfer' && to
-    ? <>{from}물 <b>{vol}</b>를<br /><b>{to}</b>로 옮긴다.</>
-    : kind === 'reschedule'
-      ? <>DGT 반입 예약 <b>{vol}</b>를<br /><b>{detail || '나중 시간으로'}</b> 미룬다.</>
-      : kind === 'rehandle'
-        ? <>DGT 야드 안에서 <b>{vol}</b>를<br /><b>재정리</b>한다.</>
-        : <><b>{a.title}</b>를 실행한다.</>;
-
-  const approve = () => set({ decision: 'approved', acted: { ...useUI.getState().acted, [data.diagnosis.alert]: Date.now() }, history: [{ at: now(), text: `승인 · ${a.title} ${vol}` }, ...history] });
+  // 승인 뒤 이어지는 절차: 협의·통보 대상마다 한 줄, 마지막에 대응 실행. 상태 칸의 체크로 보낼 절차를 고른다
+  const steps = [
+    { who: '관제 담당', what: '대응 승인' },
+    ...a.parties.map((who) => ({ who, what: who.includes('운영사') ? '협의 요청' : '통보' })),
+    { who: '현장 운영', what: '대응 실행' },
+  ];
+  const open = steps.map((_, i) => i).filter((i) => i > 0 && !sent[i]); // 아직 보내지 않은 절차
+  const picked = open.filter((i) => pick[i]);
+  const allOn = open.length > 0 && picked.length === open.length;
+  const toggleAll = () => setPick(allOn ? {} : Object.fromEntries(open.map((i) => [i, true])));
+  const sendPicked = () => {
+    if (!picked.length) return;
+    setSent({ ...sent, ...Object.fromEntries(picked.map((i) => [i, true])) });
+    setPick({});
+    set({ history: [{ at: now(), text: `${allOn ? '전체' : '선택'} 보내기 · ${picked.map((i) => steps[i].who).join(', ')}` }, ...history] });
+  };
+  const approve = () => set({ decision: 'approved', acted: { ...useUI.getState().acted, [data.diagnosis.alert]: Date.now() }, history: [{ at: now(), text: `승인 · ${a.title} ${a.volume.value.toLocaleString()} ${a.volume.unit}` }, ...history] });
   const undo = () => set({ decision: null, history: [{ at: now(), text: '승인 취소' }, ...history] });
 
   return (
     <div className="card pn">
       <div className="pn-head"><h2>승인</h2></div>
 
-      <p className="ap-why"><span>문제</span>DGT 수출 블록 포화 → 게이트 대기열 → 배후도로 넘침</p>
-      <section className="ap-do" aria-label="승인할 대응">
-        <span className="ap-do-k">이번 대응</span>
-        <p>{doing}</p>
-      </section>
-
-      {decision !== 'approved' ? (
-        <div className="decide">
-          <button className="btn btn-primary" onClick={approve}><Icon name="check" size={15} />승인</button>
+      {decision !== 'approved' && (
+        <div className="ap-confirm" role="alertdialog" aria-label="승인 동의">
+          <p>승인하는 것에 동의하십니까?</p>
+          <div className="ap-confirm-btns">
+            <button type="button" className="btn btn-primary" onClick={approve}>동의</button>
+            <button type="button" className="btn btn-ghost" onClick={() => go(3)}>취소</button>
+          </div>
         </div>
-      ) : (
-        <section className="pn-sec">
-          <p className="ap-done"><Icon name="check" size={16} />승인되었습니다. 이 대응을 실행합니다.</p>
-          <button className="btn btn-ghost btn-block ap-undo" onClick={undo}>승인 취소</button>
+      )}
+      {decision === 'approved' && (
+        <section className="ap-steps" aria-label="승인 뒤 절차">
+          <p className="ap-done">승인 처리 완료 · 아래 절차에 따라 대응을 실행합니다</p>
+          <table>
+            <thead>
+              <tr>
+                <th>순서</th><th>절차</th><th>대상</th>
+                <th className="st"><label><input type="checkbox" checked={allOn} disabled={!open.length} onChange={toggleAll} />전체 선택</label></th>
+              </tr>
+            </thead>
+            <tbody>
+              {steps.map((s, i) => (
+                <tr key={i}>
+                  <th scope="row">{i + 1}</th><td>{s.what}</td><td>{s.who}</td>
+                  <td className={`st ${i === 0 || sent[i] ? 'ok' : ''}`}>
+                    {i === 0 ? <span>완료</span> : sent[i] ? <span>보냄</span> : (
+                      <label><input type="checkbox" checked={!!pick[i]} onChange={(e) => setPick({ ...pick, [i]: e.target.checked })} />대기</label>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button type="button" className="btn btn-primary ap-sendall" disabled={!picked.length} onClick={sendPicked}>
+            {!open.length ? '전체 보내기 완료' : allOn ? '전체 보내기' : picked.length ? `선택 보내기 (${picked.length})` : '보낼 절차를 선택하세요'}
+          </button>
         </section>
+      )}
+      {/* 왼쪽 홈, 오른쪽 승인: 같은 높이·같은 여백으로 좌우 대칭 */}
+      {decision === 'approved' && (
+        <div className="ap-foot">
+          <HomeIcon />
+          <button className="btn btn-ghost ap-main" onClick={undo}>승인 취소</button>
+        </div>
       )}
 
-      {history.length > 0 && (
-        <section className="pn-sec">
-          <h3>이력</h3>
-          <ul className="hist">{history.map((h, i) => <li key={i}><span className="muted">{h.at}</span>담당자 · {h.text}</li>)}</ul>
-        </section>
-      )}
     </div>
   );
 }

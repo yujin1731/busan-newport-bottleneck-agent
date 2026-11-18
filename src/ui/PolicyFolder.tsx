@@ -41,36 +41,40 @@ function useCompare(on: boolean) {
   return { rows, base };
 }
 
-// 대응 화면에 들어오면 가운데에 대응안 폴더가 뜬다. 마우스를 올리면 운영 기준 3장이 폴더에서 펼쳐지고, 하나를 고른다.
+// 대응 화면에 들어오면 가운데에 운영 기준 선택창이 뜬다. 기준 3가지 중 하나를 고르면 그 기준의 대응안으로 넘어간다.
 export function PolicyFolder() {
   const step = useUI((s) => s.step);
   const picked = useUI((s) => s.policyPicked);
-  const policy = useUI((s) => s.policy);
   const set = useUI((s) => s.set);
   const go = useUI((s) => s.go);
-  const [open, setOpen] = useState(false); // 마우스를 올리지 못하는 환경(터치)에서는 눌러서 펼친다
+  const [sel, setSel] = useState<PolicyId | null>(null);
   const [cmp, setCmp] = useState(false);
   const { rows, base } = useCompare(cmp);
   if (step !== 3 || picked) return null;
   const pick = (id: PolicyId) => set({ policy: id, policyPicked: true, simT: 0, playing: true, simMode: 'after' });
   return (
-    <div className="fo-overlay" role="dialog" aria-modal="true" aria-label="대응안 운영 기준 선택">
+    <div className="fo-overlay" role="dialog" aria-modal="true" aria-label="운영 기준 선택">
       <button className="fo-x" onClick={() => go(2)} aria-label="진단으로 돌아가기">✕</button>
-      <div className={`folder ${open ? 'is-open' : ''}`} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)} onClick={() => setOpen(true)}>
-        <div className="folder-back" aria-hidden="true" />
-        {POLICIES.map((p, i) => (
-          <button key={p.id} className={`fcard fc-${i} ${policy === p.id ? 'was' : ''}`} onClick={(e) => { e.stopPropagation(); pick(p.id); }} aria-label={`${p.label}: ${p.desc}`}>
-            <em>운영 기준 {i + 1}</em>
-            <b>{p.label}</b>
-            <span>{p.desc}</span>
-          </button>
-        ))}
-        <div className="folder-front">
-          <strong>대응안</strong>
-          <small>운영 기준 3가지</small>
+      <section className="po-panel">
+        <h2>운영 기준 선택</h2>
+        <div className="po-list" role="radiogroup" aria-label="운영 기준">
+          {POLICIES.map((p, i) => {
+            const on = sel === p.id;
+            return (
+              <button key={p.id} type="button" role="radio" aria-checked={on} className={`po-opt ${on ? 'is-on' : ''}`} onClick={() => setSel(p.id)} onDoubleClick={() => pick(p.id)}>
+                <span className="po-no">기준 {i + 1}</span>
+                <span className="po-radio" aria-hidden="true" />
+                <b>{p.label}</b>
+                <span className="po-desc">{p.desc}</span>
+              </button>
+            );
+          })}
         </div>
-        <button type="button" className="fo-cmp-btn" onClick={(e) => { e.stopPropagation(); setCmp(true); }}>3가지 한눈에 비교</button>
-      </div>
+        <div className="po-foot">
+          <button type="button" className="po-cmp" onClick={() => setCmp(true)}>3가지 한눈에 비교</button>
+          <button type="button" className="po-go" disabled={!sel} onClick={() => sel && pick(sel)}>{sel ? '선택한 기준으로 진행' : '기준을 선택하십시오'}</button>
+        </div>
+      </section>
       {cmp && (
         <div className="fo-cmp-wrap" onClick={() => setCmp(false)}>
           <section className="fo-cmp" onClick={(e) => e.stopPropagation()} aria-label="운영 기준 3가지 비교">
@@ -85,7 +89,7 @@ export function PolicyFolder() {
                     <th scope="row">{r.label}</th>
                     <td className="left">{r.plan}</td>
                     <td>{r.wait}</td><td>{r.cost}</td><td>{r.miss}</td>
-                    <td><button type="button" onClick={() => { setCmp(false); pick(r.id); }}>선택</button></td>
+                    <td><button type="button" onClick={() => { setCmp(false); setSel(r.id); }}>선택</button></td>
                   </tr>
                 ))}
               </tbody>

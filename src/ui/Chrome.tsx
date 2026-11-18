@@ -105,13 +105,12 @@ export function OverviewCard() {
             <li key={a.id} className={`bn-item ${done ? 'is-done' : a.severity === '심각' ? 'is-jam' : 'is-warn'}`}>
               <div className="bn-top">
                 <span className="bn-sev">{done ? '종료' : a.severity}</span>
-                <span className="bn-time">{a.terminal} · {done ? '정상화됨' : `${a.duration}째`}</span>
+                {!done && <span className="bn-time">{a.terminal} · {a.duration}째</span>}
               </div>
               <div className="bn-title">{a.title}</div>
               <div className="bn-act">
                 {done && <span className="bn-state"><Icon name="check" size={14} />혼잡도 정상화</span>}
-                {doing && (<><span className="bn-state"><Icon name="wait" size={14} />대응 진행 중</span><button type="button" className="bn-stop" onClick={() => endBottleneck(a.id, true)}>STOP</button></>)}
-                {!done && !doing && !a.diagnosis && <span className="bn-state bn-watch">{a.brief?.verdict ?? '관찰 중'}</span>}
+                {doing && (<><span className="bn-state"><Icon name="wait" size={14} />대응 진행 중</span><button type="button" className="bn-stop" onClick={() => endBottleneck(a.id)}>STOP</button></>)}
               </div>
             </li>
           );
@@ -122,17 +121,16 @@ export function OverviewCard() {
 }
 
 // 병목 종료 알림: 패널 밑에 잠깐 떴다가 사라진다
-export function ToastHost({ inline = false }: { inline?: boolean }) {
+export function ToastHost() {
   const toasts = useUI((s) => s.toasts);
   const set = useUI((s) => s.set);
   const step = useUI((s) => s.step);
-  if (!toasts.length || (inline ? step !== 1 : step === 1)) return null;
+  if (!toasts.length || step !== 1) return null;
   return (
-    <div className={`toasts ${inline ? 'is-inline' : 'is-fixed'}`} role="status" aria-live="polite">
+    <div className="toasts is-inline" role="status" aria-live="polite">
       {toasts.map((t) => (
         <div key={t.key} className="toast">
           <b>{t.title}</b>
-          <span>{t.text}</span>
           <button type="button" className="toast-rep" onClick={() => set({ reportOpen: true })}>레포트 분석</button>
           <button type="button" aria-label="알림 닫기" onClick={() => set({ toasts: useUI.getState().toasts.filter((x) => x.key !== t.key) })}>✕</button>
         </div>
@@ -193,7 +191,7 @@ export function RightRail({ alerts, overview }: { alerts: React.ReactNode | null
         <Handle open={oOpen} label="진행 중인 병목" on={() => setUI({ ovOpen: !oOpen })} />
         {overview}
       </div>
-      <ToastHost inline />
+      <ToastHost />
     </div>
   );
 }

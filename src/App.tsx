@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useUI } from './store';
 import { loadBundle } from './data/dataSource';
 import { Scene } from './scene/Scene';
-import { TopBar, OverviewCard, Tooltip, RightRail, ToastHost } from './ui/Chrome';
-import { checkAutoEnd } from './data/bottleneck';
+import { TopBar, OverviewCard, Tooltip, RightRail } from './ui/Chrome';
 import { Panel } from './ui/Panels';
 import { ResultModal } from './ui/ResultModal';
 import { CctvPeek } from './ui/CctvPeek';
@@ -30,11 +29,6 @@ export default function App() {
     const t = window.setTimeout(() => setSplash('off'), 600);
     return () => window.clearTimeout(t);
   }, [splash]);
-  // 승인한 대응이 끝날 시각이 되면 병목을 종료로 바꾼다
-  useEffect(() => {
-    const t = window.setInterval(() => checkAutoEnd(), 1000);
-    return () => window.clearInterval(t);
-  }, []);
   useEffect(() => {
     loadBundle().then((d) => set({ data: d })).catch((e) => setErr(String(e.message || e)));
   }, [set]);
@@ -53,7 +47,6 @@ export default function App() {
       <HeatPanel />
       <PolicyFolder />
       <ReportModal />
-      <ToastHost />
       <ResultModal />
       {splash !== 'off' && <Splash phase={splash} />}
     </div>
