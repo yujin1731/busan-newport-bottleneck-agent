@@ -1,12 +1,12 @@
-import { useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useEffect, useMemo, useRef } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
 import { Html, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { COL } from './palette';
 import { PAD_H } from './Ground';
 import { nodeMap, polyline, polyLen, along, slice, TRUCK_GAP } from './geo';
 import { useQueuePaths } from './Roads';
-import { useUI } from '../store';
+import { useUI, peekHold, peekLeave } from '../store';
 import { useView } from '../view';
 import { Icon } from '../ui/Icon';
 
@@ -173,7 +173,6 @@ export function ActionRoute() {
   if (!show || (simMode === 'after' && !data.cands.candidates.find((c) => c.id === simCand)?.route)) return null;
   const v = pts2.map(([x, z]) => new THREE.Vector3(x, 1.2, z));
   const g = N[data.action.to.node];
-  const mid = along(pts2, len * 0.62);
   return (
     <group>
       {pts2.slice(1).map((b, i) => {
@@ -191,16 +190,6 @@ export function ActionRoute() {
         <boxGeometry args={[2.6, 1, 1]} />
         <meshStandardMaterial color={COL.blue} emissive={COL.blue} emissiveIntensity={0.3} />
       </instancedMesh>
-      <Html position={[mid.x, 5, mid.z]} center zIndexRange={[25, 0]} style={{ pointerEvents: 'none' }}>
-        <div className="tag tag-act">
-          <span className="tag-k">{decision === 'approved' ? '대응 확정' : '대응 경로'}</span>
-          <span className="tag-v">DGT 반입분 → HJNC</span>
-        </div>
-      </Html>
-      {/* 임시 블록 라벨: 블록 위를 가리지 않게 블록 동쪽 옆에 둔다 */}
-      <Html position={[tb.cx + (tb.axis === 'z' ? tb.rows * (l.container.W + l.container.gapW) : tb.bays * (l.container.L + l.container.gapL)) / 2 + 2.5, 2, tb.cz]} zIndexRange={[25, 0]} style={{ pointerEvents: 'none', transform: 'translate(0, -50%)' }}>
-        <div className="tag tag-act"><span className="tag-k">임시 블록</span><span className="tag-v">{Math.round(moved)} / {data.action.volume.value} TEU</span></div>
-      </Html>
       <ShiftBlink x={g.x} z={g.z} />
     </group>
   );
@@ -211,7 +200,6 @@ function ShiftBlink({ x, z }: { x: number; z: number }) {
   const { queues, data } = useView();
   const mat = useRef<THREE.MeshBasicMaterial>(null!);
   const q = queues[data.action.to.node] ?? 0;
-  const shift = data.result.items.find((r) => r.id === 'shift');
   useFrame(({ clock }) => {
     if (mat.current) mat.current.opacity = reduceMotion() ? 0.9 : 0.35 + 0.6 * (0.5 + 0.5 * Math.sin(clock.elapsedTime * 5));
   });
@@ -222,31 +210,23 @@ function ShiftBlink({ x, z }: { x: number; z: number }) {
         <ringGeometry args={[9, 10.2, 4, 1]} />
         <meshBasicMaterial ref={mat} color={COL.orange} transparent depthWrite={false} />
       </mesh>
-      <Html position={[12, 4, -4]} zIndexRange={[25, 0]} style={{ pointerEvents: 'none' }}>
-        <div className="tag tag-warn"><span className="tag-k">혼잡 전가</span><span className="tag-v">게이트 대기 +{shift?.value}분</span></div>
-      </Html>
     </group>
   );
 }
 
 // 터미널 카드: 이름 + 장치율(수치와 막대) + 게이트 대기
 export function Labels() {
-  const { data, st, step, queues } = useView();
+  const { data, st, step } = useView();
   const focus = useUI((s) => s.focus);
   const l = data.layout;
-  // 원인 블록이 포화(88% 이상)일 때만 해당 터미널 카드 아래에 원인 줄을 붙인다
-  const causeIds = data.diagnosis.cause.blocks;
-  const causeTerm = causeIds[0]?.split('-')[0];
-  const cMax = Math.round(Math.max(...causeIds.map((b) => st.occ[b] ?? 0)) * 100);
-  const causeOcc = step <= 3 && cMax >= 88 ? cMax : null;
   return (
     <group>
+      {step === 1 && <TerminalHover />}
       {l.terminals.map((t) => {
         // 블록 라벨이 뜨는 터미널(진단 DGT, 확대한 터미널)은 카드가 블록 칩을 가리므로 숨긴다
         if (t.id === (step === 2 ? 'DGT' : step === 1 && focus !== 'port' ? focus : null)) return null;
         const r = t.rect;
         const occ = Math.round((t.blocks.filter((b) => !b.temp).reduce((a, b) => a + (st.occ[b.id] ?? 0), 0) / t.blocks.filter((b) => !b.temp).length) * 100);
-        const q = queues[`g_${t.id}`] ?? 0;
         const lvl = occ >= 85 ? 'hi' : occ >= 75 ? 'mid' : 'lo';
         // 정렬 규칙: 모든 카드는 터미널 왼쪽 끝에 맞춘다. 북쪽 부두는 위, 남쪽 부두와 DGT는 아래(DGT 위는 HJNC 카드와 같은 줄이라 겹침).
         const above = t.quay !== 'N' && t.id !== 'DGT';
@@ -256,26 +236,12 @@ export function Labels() {
         return (
           <Html key={t.id} position={pos} zIndexRange={[20, 0]} style={{ pointerEvents: 'none', transform: anchor }}>
             {(() => {
-              const tat = st.gates[`g_${t.id}`].tat;
               return (
-                <div className={`tbox ${dim ? 'is-dim' : ''} ${lvl === 'hi' ? 'is-hi' : ''}`}>
-                  <div className="tbox-main">
-                    <div className="tbox-id">
-                      <b>{t.name}</b>
-                      <span>장치율</span>
-                      <strong className={`lv-${lvl}`}>{occ}<small>%</small></strong>
-                    </div>
-                    <div className="tbox-data">
-                      <div className="tbox-kv">
-                        <span><em>대기</em><b className={q >= 40 ? 'lv-jam' : q >= 15 ? 'lv-hi' : ''}>{q}</b></span>
-                        <span className="kv-tat"><em>TAT</em><b>{tat}</b></span>
-                        <span className="kv-ship"><em>선박</em><b>{st.ships[t.id] ?? 0}</b></span>
-                      </div>
-                    </div>
-                  </div>
-                  {causeOcc !== null && t.id === causeTerm && (
-                    <div className="tbox-cause">수출 블록 장치율 {causeOcc}%</div>
-                  )}
+                <div
+                  data-tid={t.id}
+                  className={`tbox ${dim ? 'is-dim' : ''} ${lvl === 'hi' ? 'is-hi' : ''}`}
+                >
+                  <div className="tbox-main"><div className="tbox-id"><b>{t.name}</b></div></div>
                 </div>
               );
             })()}
@@ -334,4 +300,72 @@ function CraneStatus() {
       })}
     </>
   );
+}
+
+// 터미널 구역 어디든 마우스를 올리면 그 터미널의 CCTV 병목 히트맵을 띄운다(관제 화면)
+// 구역 모서리를 화면 좌표로 옮겨 포함 여부로 판정한다(장비·컨테이너가 위에 있어도 구역 안이면 된다)
+function TerminalHover() {
+  const { camera, gl, controls } = useThree();
+  useEffect(() => {
+    const el = gl.domElement;
+    // 확대한 상태: 카드로 구역을 골랐거나, 마우스 휠로 항만 전체 화면보다 확대한 경우
+    const isZoomed = () => {
+      const minZ = (controls as unknown as { minZoom?: number } | null)?.minZoom;
+      return useUI.getState().focus !== 'port' || (minZ !== undefined && (camera as THREE.OrthographicCamera).zoom > minZ * 1.35);
+    };
+    const inPoly = (px: number, py: number, p: [number, number][]) => {
+      let c = false;
+      for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+        if ((p[i][1] > py) !== (p[j][1] > py) && px < ((p[j][0] - p[i][0]) * (py - p[i][1])) / (p[j][1] - p[i][1]) + p[i][0]) c = !c;
+      }
+      return c;
+    };
+    // 확대한 화면(focus가 항만 전체가 아님)에서는 마우스를 올려도 뜨지 않는다. 터미널 안을 눌러야 뜬다
+    const hitOf = (e: PointerEvent | MouseEvent) => {
+      const d = useUI.getState().data;
+      if (!d) return null;
+      const b = el.getBoundingClientRect();
+      const px = e.clientX - b.left, py = e.clientY - b.top;
+      for (const t of d.layout.terminals) {
+        const r = t.rect;
+        const poly = ([[r.x0, r.z0], [r.x1, r.z0], [r.x1, r.z1], [r.x0, r.z1]] as [number, number][]).map(([x, z]) => {
+          const v = new THREE.Vector3(x, 0, z).project(camera);
+          return [((v.x + 1) / 2) * b.width, ((1 - v.y) / 2) * b.height] as [number, number];
+        });
+        if (inPoly(px, py, poly)) return t.id;
+      }
+      return null;
+    };
+    // 위쪽 터미널 줄(남쪽 부두) 바로 아래 바다의 화면 높이: 아래쪽 터미널의 히트맵이 뜨는 자리
+    const seaYOf = () => {
+      const d = useUI.getState().data;
+      if (!d) return 0;
+      const zmax = Math.max(...d.layout.terminals.filter((t) => t.quay === 'S').map((t) => t.rect.z1)) + 4;
+      const v = new THREE.Vector3(0, 0, zmax).project(camera);
+      return el.getBoundingClientRect().top + ((1 - v.y) / 2) * el.getBoundingClientRect().height;
+    };
+    let down: [number, number] | null = null;
+    const move = (e: PointerEvent) => {
+      const s = useUI.getState();
+      const zoomed = isZoomed();
+      const hit = hitOf(e);
+      if (hit && (!zoomed || s.peek)) { peekHold(); s.set({ peek: { tid: zoomed ? s.peek!.tid : hit, x: e.clientX, y: e.clientY, seaY: seaYOf() } }); }
+      else if (!hit && s.peek) peekLeave();
+    };
+    const pdown = (e: PointerEvent) => { down = [e.clientX, e.clientY]; };
+    const click = (e: MouseEvent) => {
+      const s = useUI.getState();
+      if (!isZoomed() || (down && Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5)) return;
+      const hit = hitOf(e);
+      if (hit) { peekHold(); s.set({ peek: { tid: hit, x: e.clientX, y: e.clientY, seaY: seaYOf() } }); }
+      else if (s.peek) peekLeave(0);
+    };
+    const leave = () => { peekLeave(); };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerdown', pdown);
+    el.addEventListener('click', click);
+    el.addEventListener('pointerleave', leave);
+    return () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerdown', pdown); el.removeEventListener('click', click); el.removeEventListener('pointerleave', leave); useUI.getState().set({ peek: null }); };
+  }, [camera, gl, controls]);
+  return null;
 }

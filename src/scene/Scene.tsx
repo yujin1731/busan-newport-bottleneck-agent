@@ -7,14 +7,16 @@ import { Ground } from './Ground';
 import { Containers, OccupancyPads, TempFill } from './Yard';
 import { Equipment, Ships } from './Equipment';
 import { Roads, Vehicles, QueueTint } from './Roads';
+import { TerminalRoads, TerminalFlow, ZoneTint } from './Access';
+import { plans, zoneBounds } from './zones';
 import { CauseMarker, Propagation, ActionRoute, Labels, BlockLabels } from './Markers';
 import { useUI } from '../store';
 
 // 화면 단계별 보는 범위 (장면 좌표, 북쪽이 위)
 const VIEWS: Record<string, { x0: number; x1: number; z0: number; z1: number }> = {
-  port: { x0: -335, x1: 302, z0: -150, z1: 175 }, // 배후단지·시가지·남컨 배후까지 지도처럼 함께 보이게
+  port: { x0: -348, x1: 362, z0: -150, z1: 182 }, // 배후단지·시가지·남컨 배후까지 지도처럼 함께 보이게
   DGT: { x0: -325, x1: -215, z0: -108, z1: 34 },
-  'DGT+HJNC': { x0: -325, x1: -28, z0: -108, z1: 34 },
+  'DGT+HJNC': { x0: -338, x1: -78, z0: -98, z1: -8 }, // 이동 경로(DGT 게이트 → HJNC 임시 블록)가 빈 영역을 가득 채우게 바짝
 };
 // 시점 두 가지: 항만 전체는 정면(남쪽에서, 북쪽이 위), 확대·시뮬레이션은 남동쪽 사선(아이소메트릭)
 type Basis = { dir: THREE.Vector3; offset: THREE.Vector3; right: THREE.Vector3; sup: THREE.Vector3 };
@@ -47,13 +49,21 @@ function groundFor(du: number, dv: number, B: Basis) {
 
 // 화면 위 카드가 가리는 여백(px)
 export function insets(step: number, width: number, panel = true, ov = true) {
-  const right = step === 1 ? (width < 1500 ? 320 : 360) : (width < 1500 ? 384 : 424); // S1 오른쪽 열은 더 좁다
+  // 진단(2)은 큰 설명서 책이 오른쪽을 차지한다(CSS의 clamp(560px, 54vw, 1000px)와 같은 값)
+  const book = Math.min(1000, Math.max(560, width * 0.54));
+  const right = step === 1 ? (width < 1500 ? 320 : 360) : step === 2 || step === 3 ? book - 66 : (width < 1500 ? 384 : 424);
   const left = 40; // 항만 현황·경보 목록은 오른쪽. 왼쪽은 DGT 카드 여백만
   return { top: 70, bottom: 0, left, right: panel || (step === 1 && ov) ? right + 90 : 24 };
 }
 
 function boundsFor(focus: string) {
   if (VIEWS[focus]) return VIEWS[focus];
+  // 히트맵 카드로 고른 구역: 터미널 진입 흐름의 그 지점으로
+  if (focus.startsWith('zone:')) {
+    const [, tid, i] = focus.split(':');
+    const pl = plans(useUI.getState().data!.layout)[tid];
+    if (pl) return zoneBounds(pl.zones[Number(i)], 16);
+  }
   const t = useUI.getState().data!.layout.terminals.find((x) => x.id === focus);
   if (!t) return VIEWS.port;
   const r = t.rect;
@@ -64,21 +74,18 @@ function boundsFor(focus: string) {
 function CameraRig() {
   const focus = useUI((s) => s.focus);
   const step = useUI((s) => s.step);
-  const alertsOpen = useUI((s) => s.alertsOpen);
-  const ovOpen = useUI((s) => s.ovOpen);
   const { camera, size, controls } = useThree();
   const anim = useRef<null | { t: number; fromT: THREE.Vector3; toT: THREE.Vector3; fromZ: number; toZ: number; fromO: THREE.Vector3; toO: THREE.Vector3 }>(null);
   const synced = useRef(false);
-
   useEffect(() => {
     const b = boundsFor(focus);
-    const ins = insets(step, size.width, step !== 1 || alertsOpen, ovOpen);
+    const ins = insets(step, size.width, step !== 1, false) // 항만 현황 패널은 지도 위에 얹기만 한다(펼쳐도 지도는 그대로);
     const aw = size.width - ins.left - ins.right, ah = size.height - ins.top - ins.bottom;
     const diag = focus !== 'port';
     const B = diag ? DIAG : FRONT;
     const pr = project(b, B);
     // 전체: 가로는 잘리지 않게, 세로만 확대 여유. 확대(진단·대응): 주변이 보이게 한 단계 덜 확대
-    const zoom = diag ? Math.min(aw / pr.du, ah / pr.dv) * (focus === 'DGT' ? 0.92 : focus === 'DGT+HJNC' ? 0.92 : 0.78) : Math.min(aw / pr.du, (ah / pr.dv) * 1.16);
+    const zoom = diag ? Math.min(aw / pr.du, ah / pr.dv) * (focus === 'DGT' ? 0.92 : focus === 'DGT+HJNC' ? 1.0 : 0.78) : Math.min(aw / pr.du, (ah / pr.dv) * 1.0);
     // 상자 중심이 카드 사이 빈 영역의 가운데에 오도록 목표점을 옮긴다
     const dx = (ins.left - ins.right) / 2, dy = (ins.top - ins.bottom) / 2;
     const wantU = pr.um - dx / zoom, wantV = pr.vm + dy / zoom;
@@ -87,7 +94,7 @@ function CameraRig() {
     const ctl = controls as unknown as { target: THREE.Vector3; update: () => void; minZoom: number } | null;
     // 축소 한계: 항만 전체 화면보다 더 멀어지지 않게 (지도 가장자리가 보이지 않도록)
     const pf = project(VIEWS.port, FRONT);
-    if (ctl) ctl.minZoom = Math.min(aw / pf.du, (ah / pf.dv) * 1.16) * 0.97;
+    if (ctl) ctl.minZoom = Math.min(aw / pf.du, (ah / pf.dv) * 1.0) * 0.97;
     if (!ctl || !synced.current) {
       camera.position.copy(target).add(B.offset);
       (camera as THREE.OrthographicCamera).zoom = zoom;
@@ -98,17 +105,31 @@ function CameraRig() {
       return;
     }
     anim.current = { t: 0, fromT: ctl.target.clone(), toT: target, fromZ: (camera as THREE.OrthographicCamera).zoom, toZ: zoom, fromO: camera.position.clone().sub(ctl.target), toO: B.offset.clone() };
-  }, [focus, step, alertsOpen, ovOpen, size.width, size.height, controls]);
+  }, [focus, step, size.width, size.height, controls]);
 
   useFrame((_, dt) => {
     if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__twin = { camera, controls, size };
+
     const a = anim.current;
     const ctl = controls as unknown as { target: THREE.Vector3; update: () => void } | null;
-    // 이동 한계: 항만 범위 밖으로 끌고 나가지 않게 목표점을 묶는다
+    // 이동 한계: 화면 가장자리가 항만 범위 밖(빈 땅·바다)을 비추지 않게 묶는다. 범위보다 화면이 크면 가운데에 둔다
     if (ctl && !a) {
-      const B = VIEWS.port, t = ctl.target;
-      const cx = THREE.MathUtils.clamp(t.x, B.x0, B.x1), cz = THREE.MathUtils.clamp(t.z, B.z0, B.z1);
-      if (cx !== t.x || cz !== t.z) { camera.position.x += cx - t.x; camera.position.z += cz - t.z; t.set(cx, t.y, cz); ctl.update(); }
+      const t = ctl.target;
+      const cam = camera as THREE.OrthographicCamera;
+      const B = camera.position.x - t.x > 20 ? DIAG : FRONT;
+      const pr = project(VIEWS.port, B);
+      const hu = size.width / 2 / cam.zoom, hv = size.height / 2 / cam.zoom;
+      const u = t.dot(B.right), v = t.dot(B.sup);
+      // 화면이 범위보다 크면 범위 전체가 화면 안에 있기만 하면 되고(패널 여백 때문에 한쪽으로 밀 수 있다), 작으면 가장자리가 범위를 넘지 않는다
+      const lo = (min: number, max: number, h: number, cur: number) => { const p = min + h, q = max - h; return THREE.MathUtils.clamp(cur, Math.min(p, q), Math.max(p, q)); };
+      const un = lo(pr.um - pr.du / 2, pr.um + pr.du / 2, hu, u);
+      const vn = lo(pr.vm - pr.dv / 2, pr.vm + pr.dv / 2, hv, v);
+      if (Math.abs(un - u) > 0.01 || Math.abs(vn - v) > 0.01) {
+        const g = groundFor(un - u, vn - v, B);
+        camera.position.x += g.x; camera.position.z += g.z;
+        t.set(t.x + g.x, t.y, t.z + g.z);
+        ctl.update();
+      }
     }
     if (!a || !ctl) return;
     a.t = Math.min(1, a.t + dt / 0.8);
@@ -180,6 +201,8 @@ export function Scene() {
       <fog attach="fog" args={[COL.bg, 1050, 2100]} />
       <Ground />
       <Roads />
+      <TerminalRoads />
+      <ZoneTint />
       <QueueTint />
       <Containers />
       <OccupancyPads />
@@ -187,6 +210,7 @@ export function Scene() {
       <Equipment />
       <Ships />
       <Vehicles />
+      <TerminalFlow />
       {step <= 3 && <CauseMarker />}
       {step <= 2 && <Propagation />}
       <ActionRoute />

@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
-import type { ThreeEvent } from '@react-three/fiber';
+import { useThree, type ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { COL } from './palette';
 import { hash } from './geo';
 import { Boxes, type Bx } from './Equipment';
 import { MapLand, MapExtras } from './MapLand';
-import { useUI } from '../store';
+import { useUI, peekHold } from '../store';
 import type { Terminal, Layout } from '../data/types';
 
 export const PAD_H = 0.6;
@@ -111,8 +111,13 @@ function laneLines(t: Terminal, l: Layout): Bx[] {
 function Pad({ t }: { t: Terminal }) {
   const r = t.rect;
   const set = useUI((s) => s.set);
-  const go = useUI((s) => s.go);
   const data = useUI((s) => s.data)!;
+  const { camera, controls } = useThree();
+  // 확대한 화면(카드로 구역을 골랐거나 휠로 확대)에서는 터미널을 눌러야 CCTV 히트맵이 뜬다
+  const isZoomed = () => {
+    const minZ = (controls as unknown as { minZoom?: number } | null)?.minZoom;
+    return useUI.getState().focus !== 'port' || (minZ !== undefined && (camera as THREE.OrthographicCamera).zoom > minZ * 1.35);
+  };
   const lanes = useMemo(() => laneLines(t, data.layout), [t, data]);
   const apron = useMemo(() => {
     const a = 10;
@@ -124,16 +129,15 @@ function Pad({ t }: { t: Terminal }) {
   const onMove = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
     const s = useUI.getState();
-    // 터미널을 눌러 확대하는 기능은 관제 화면(S1)에만 있다
-    if (s.step !== 1) { if (s.hover) s.set({ hover: null }); return; }
-    s.set({ hover: { id: t.id, title: '눌러서 확대', lines: [], x: e.nativeEvent.clientX, y: e.nativeEvent.clientY } });
+    // 눌러서 확인하는 기능은 관제 화면(S1)의 확대 상태에서만 안내한다(확대 전에는 마우스를 올리면 바로 뜬다)
+    if (s.step !== 1 || !isZoomed()) { if (s.hover) s.set({ hover: null }); return; }
+    s.set({ hover: { id: t.id, title: '눌러서 확인', lines: [], x: e.nativeEvent.clientX, y: e.nativeEvent.clientY } });
   };
   const onClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
     if (useUI.getState().step !== 1) return;
-    const a = data.alerts.find((x) => x.terminal === t.id && x.diagnosis);
-    if (a) go(2);
-    else set({ focus: t.id });
+    peekHold();
+    set({ hover: null, peek: { tid: t.id, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY, seaY: 0 } });
   };
 
   return (

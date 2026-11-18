@@ -48,9 +48,10 @@ export interface SimStep { step: number; minute: number; queue: Record<string, n
 export interface ResultItem { id: string; label: string; value: number; from?: number; unit: string; range: [number, number]; src: Src; good: boolean; note?: string; where?: string }
 export interface Result { basis: string; items: ResultItem[] }
 
+export interface CctvBundle { views: string[]; threshold: number; weights: Record<string, number[]>; images: Record<string, string> }
 export interface Bundle {
   layout: Layout; states: Record<number, PortState>; hours: number[]; alerts: Alert[];
-  diagnosis: Diagnosis; action: Action; simBefore: SimStep[]; simAfter: SimStep[]; result: Result; cands: CandBundle;
+  diagnosis: Diagnosis; action: Action; simBefore: SimStep[]; simAfter: SimStep[]; result: Result; cands: CandBundle; cctv: CctvBundle;
 }
 
 // 대응 후보 시연 시뮬레이션(public/mock/candidates.json, scripts/gen-candidates.mjs)

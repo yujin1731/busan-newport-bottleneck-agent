@@ -3,14 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>신항 병목 관제</title>
+    <title>Port-J</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      /* React가 뜨기 전에도 같은 시작 화면이 보이게 한다(자바스크립트가 로딩되는 동안의 빈 화면 방지) */
+      body { margin: 0; }
+      .splash { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at center, #f4f8fc 0%, #dfeaf4 70%, #cfdeec 100%); }
+      .splash-box { position: relative; width: 260px; height: 260px; display: grid; place-items: center; }
+      .splash-logo { width: 118px; height: auto; animation: splashBob 2.4s ease-in-out infinite; filter: drop-shadow(0 8px 14px rgba(20, 60, 120, 0.22)); }
+      .splash-ring { position: absolute; inset: 0; width: 100%; height: 100%; }
+      .splash-ring .arc { fill: none; stroke-linecap: round; transform-origin: 130px 130px; }
+      .splash-ring .arc-a { stroke: #2563eb; stroke-width: 3; stroke-dasharray: 280 462; animation: splashSpin 2.2s linear infinite; }
+      .splash-ring .arc-b { stroke: #f2813a; stroke-width: 3; stroke-dasharray: 150 478; animation: splashSpin 2.9s linear infinite reverse; opacity: 0.9; }
+      @keyframes splashSpin { to { transform: rotate(360deg); } }
+      @keyframes splashBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="splash" role="status" aria-label="Port-J 불러오는 중">
+        <div class="splash-box">
+          <svg class="splash-ring" viewBox="0 0 260 260" aria-hidden="true"><circle class="arc arc-a" cx="130" cy="130" r="118"></circle><circle class="arc arc-b" cx="130" cy="130" r="100"></circle></svg>
+          <img class="splash-logo" src="/port-j-logo.png" alt="" />
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

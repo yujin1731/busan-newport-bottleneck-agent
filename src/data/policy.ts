@@ -9,10 +9,10 @@
 import type { Bundle, SimStep } from './types';
 
 export type PolicyId = 'min_wait' | 'protect_cutoff' | 'min_cost';
-export const POLICIES: { id: PolicyId; label: string }[] = [
-  { id: 'min_wait', label: '대기 최소' },
-  { id: 'protect_cutoff', label: '선적 마감 우선' },
-  { id: 'min_cost', label: '비용 최소' },
+export const POLICIES: { id: PolicyId; label: string; desc: string; hint: string }[] = [
+  { id: 'min_wait', label: '대기 최소', desc: '게이트 앞에서 기다리는 차량의 전체 대기를 가장 적게 만드는 대응안을 선택합니다.', hint: '기준 지표 · 전체 차량 대기' },
+  { id: 'protect_cutoff', label: '선적 마감 우선', desc: '선적 마감을 놓치는 물량을 가장 적게 만드는 대응안을 선택합니다.', hint: '기준 지표 · 선적 마감 미준수' },
+  { id: 'min_cost', label: '비용 최소', desc: '운송, 재취급, 보관, 대기에 드는 추가비용이 가장 적은 대응안을 선택합니다.', hint: '기준 지표 · 총 추가비용' },
 ];
 
 /** 값이 없으면 null(= 산정 불가). 0으로 채우지 않는다. */

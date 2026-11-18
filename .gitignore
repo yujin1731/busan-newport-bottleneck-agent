@@ -6,3 +6,4 @@ dist
 *.zip
 .claude
 .DS_Store
+!.env.example

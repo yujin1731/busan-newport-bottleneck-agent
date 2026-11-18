@@ -5,6 +5,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { COL } from './palette';
 import { nodeMap, route, polyline, polyLen, along, slice, TRUCK_GAP, type V2 } from './geo';
 import { useUI } from '../store';
+import { plans } from './zones';
 import { useView } from '../view';
 import type { Layout } from '../data/types';
 
@@ -75,6 +76,7 @@ export function Roads() {
   const l = data.layout;
   const N = nodeMap(l);
   const set = useUI((s) => s.set);
+  const P = plans(l);
   return (
     <group>
       {l.links.map((k) => {
@@ -103,6 +105,8 @@ export function Roads() {
           <group
             key={n.id}
             position={[n.x, 0, n.z]}
+            // 게이트 빔은 진입 방향과 직각(차로를 가로지르게). DGT는 가로로 들어오므로 세로로 선다
+            rotation={[0, n.terminal && P[n.terminal] ? -Math.atan2(P[n.terminal].p[1], P[n.terminal].p[0]) : 0, 0]}
             onPointerMove={(e) => {
               e.stopPropagation();
               set({ hover: { id: n.id, title: n.name, lines: [`대기 ${g.queue}대`, `처리 ${g.thr}대/시 · TAT ${g.tat}분`], x: e.nativeEvent.clientX, y: e.nativeEvent.clientY } });
