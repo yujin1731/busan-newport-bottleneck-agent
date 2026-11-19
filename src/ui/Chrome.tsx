@@ -96,7 +96,12 @@ export function OverviewCard() {
         <h2>진행 중인 병목</h2>
         <span className="head-num" aria-label={`${live}건`}>{live}<small>건</small></span>
       </div>
-      {list.length === 0 && <p className="bn-empty">진행 중인 병목이 없습니다.</p>}
+      {list.length === 0 && (
+        <div className="bn-calm" role="status">
+          <span className="bn-calm-mark"><Icon name="check" size={16} /></span>
+          <div><b>정상 운영 중</b></div>
+        </div>
+      )}
       <ul className="bn-list">
         {list.map((a) => {
           const done = !!ended[a.id];
@@ -105,12 +110,11 @@ export function OverviewCard() {
             <li key={a.id} className={`bn-item ${done ? 'is-done' : a.severity === '심각' ? 'is-jam' : 'is-warn'}`}>
               <div className="bn-top">
                 <span className="bn-sev">{done ? '종료' : a.severity}</span>
-                {!done && <span className="bn-time">{a.terminal} · {a.duration}째</span>}
               </div>
               <div className="bn-title">{a.title}</div>
               <div className="bn-act">
                 {done && <span className="bn-state"><Icon name="check" size={14} />혼잡도 정상화</span>}
-                {doing && (<><span className="bn-state"><Icon name="wait" size={14} />대응 진행 중</span><button type="button" className="bn-stop" onClick={() => endBottleneck(a.id)}>STOP</button></>)}
+                {doing && <button type="button" className="bn-stop" onClick={() => endBottleneck(a.id)}>STOP</button>}
               </div>
             </li>
           );

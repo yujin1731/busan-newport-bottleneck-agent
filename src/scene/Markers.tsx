@@ -34,6 +34,7 @@ export function CauseMarker() {
   const beam = useRef<THREE.MeshBasicMaterial>(null!);
   useFrame(({ clock }) => {
     if (reduceMotion()) return;
+    if (!ring1.current || !ring2.current || !beam.current) return; // 평상시에는 원인 표시를 그리지 않는다
     // 퍼져 나가는 파동 링 2개(반 박자 차이) + 기둥 빛 맥박
     const T = clock.elapsedTime;
     [[ring1, mat1, 0], [ring2, mat2, 0.5]].forEach(([r, m, off]) => {

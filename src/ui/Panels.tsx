@@ -26,12 +26,11 @@ function HomeIcon() {
   const set = useUI((s) => s.set);
   const go = useUI((s) => s.go);
   return (
-    <button type="button" className="ap-homeico" aria-label="메인 화면으로" title="메인 화면으로" onClick={() => { set({ decision: null, policyPicked: false }); go(1); }}>
-      <svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">
-        <circle cx="32" cy="32" r="30" fill="#12304f" stroke="#fff" strokeWidth="2" />
-        <path d="M32 14 12 31h6v17h10V38h8v10h10V31h6L40 22v-6h-5v2.2z" fill="#fff" stroke="#fff" strokeWidth="2" strokeLinejoin="round" />
-        <rect x="29" y="38" width="6" height="10" fill="#12304f" />
+    <button type="button" className="ap-home" aria-label="메인 화면으로" onClick={() => { set({ decision: null, policyPicked: false }); go(1); }}>
+      <svg viewBox="0 0 64 64" width="26" height="26" aria-hidden="true">
+        <path d="M32 12 10 31h7v19h11V38h8v12h11V31h7L40 22v-7h-5v3z" fill="#fff" stroke="#fff" strokeWidth="2" strokeLinejoin="round" />
       </svg>
+      <span>HOME</span>
     </button>
   );
 }
@@ -166,6 +165,7 @@ function S4() {
   const a = useActiveAction();
   const [sent, setSent] = useState<Record<number, boolean>>({}); // 보낸 절차
   const [pick, setPick] = useState<Record<number, boolean>>({}); // 체크한 절차
+  const [log, setLog] = useState<{ at: string; text: string }[]>([]); // 보낸 내용(표 아래에 쌓인다)
   const now = () => new Date().toTimeString().slice(0, 5);
 
   // 승인 뒤 이어지는 절차: 협의·통보 대상마다 한 줄, 마지막에 대응 실행. 상태 칸의 체크로 보낼 절차를 고른다
@@ -182,10 +182,12 @@ function S4() {
     if (!picked.length) return;
     setSent({ ...sent, ...Object.fromEntries(picked.map((i) => [i, true])) });
     setPick({});
+    const at = new Date().toTimeString().slice(0, 8);
+    const said = (i: number) => (steps[i].what === '협의 요청' ? `${steps[i].who}에 협의를 요청했습니다.` : steps[i].what === '통보' ? `${steps[i].who}에 통보했습니다.` : `${steps[i].who}에 대응 실행을 전달했습니다.`);
+    setLog([...picked.map((i) => ({ at, text: said(i) })).reverse(), ...log]);
     set({ history: [{ at: now(), text: `${allOn ? '전체' : '선택'} 보내기 · ${picked.map((i) => steps[i].who).join(', ')}` }, ...history] });
   };
   const approve = () => set({ decision: 'approved', acted: { ...useUI.getState().acted, [data.diagnosis.alert]: Date.now() }, history: [{ at: now(), text: `승인 · ${a.title} ${a.volume.value.toLocaleString()} ${a.volume.unit}` }, ...history] });
-  const undo = () => set({ decision: null, history: [{ at: now(), text: '승인 취소' }, ...history] });
 
   return (
     <div className="card pn">
@@ -226,13 +228,17 @@ function S4() {
           <button type="button" className="btn btn-primary ap-sendall" disabled={!picked.length} onClick={sendPicked}>
             {!open.length ? '전체 보내기 완료' : allOn ? '전체 보내기' : picked.length ? `선택 보내기 (${picked.length})` : '보낼 절차를 선택하세요'}
           </button>
+          {log.length > 0 && (
+            <ul className="ap-log" aria-label="전달 내역" aria-live="polite">
+              {log.map((l, k) => <li key={k}><time>{l.at}</time>{l.text}<b>전달 완료</b></li>)}
+            </ul>
+          )}
         </section>
       )}
-      {/* 왼쪽 홈, 오른쪽 승인: 같은 높이·같은 여백으로 좌우 대칭 */}
-      {decision === 'approved' && (
+      {/* 전부 보내고 나면 가운데에 HOME 버튼이 나온다 */}
+      {decision === 'approved' && !open.length && (
         <div className="ap-foot">
           <HomeIcon />
-          <button className="btn btn-ghost ap-main" onClick={undo}>승인 취소</button>
         </div>
       )}
 

@@ -11,6 +11,8 @@ import { PolicyFolder } from './ui/PolicyFolder';
 import { ReportModal } from './ui/ReportModal';
 import { Splash } from './ui/Splash';
 
+const CALM_HOLD_MS = 13000; // 평상시 화면을 보여 주는 시간
+
 export default function App() {
   const data = useUI((s) => s.data);
   const set = useUI((s) => s.set);
@@ -32,6 +34,29 @@ export default function App() {
   useEffect(() => {
     loadBundle().then((d) => set({ data: d })).catch((e) => setErr(String(e.message || e)));
   }, [set]);
+
+  // 평상시 → 경보: 시작 화면이 걷힌 뒤 잠시 이상 없는 상태를 보여 주고, 시간이 흐르며 DGT 병목이 올라온다.
+  // Enter 키를 누르면 기다리지 않고 바로 시작한다(영상 촬영용).
+  const calm = useUI((s) => s.calm);
+  const step = useUI((s) => s.step);
+  useEffect(() => {
+    if (!data || splash !== 'off' || !calm || step !== 1) return;
+    let tick: number | undefined;
+    let began = false;
+    const begin = () => {
+      if (began) return;
+      began = true;
+      window.clearTimeout(hold);
+      tick = window.setInterval(() => {
+        const h = useUI.getState().hour + 1;
+        if (h >= 0) { window.clearInterval(tick); set({ hour: 0, calm: false }); } else set({ hour: h });
+      }, 600);
+    };
+    const hold = window.setTimeout(begin, CALM_HOLD_MS);
+    const key = (e: KeyboardEvent) => { if (e.key === 'Enter') begin(); };
+    window.addEventListener('keydown', key);
+    return () => { window.clearTimeout(hold); window.clearInterval(tick); window.removeEventListener('keydown', key); };
+  }, [data, splash, calm, step, set]);
 
   if (err) return <div className="boot"><b>데이터를 불러오지 못했다</b><span>{err}</span><button className="btn btn-soft" onClick={() => location.reload()}>다시 시도</button></div>;
   if (!data) return <Splash phase="on" />;

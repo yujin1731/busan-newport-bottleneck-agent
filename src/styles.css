@@ -1932,3 +1932,47 @@ body, button, input, select, textarea { font-family: var(--f); font-weight: 400;
 .po-opt.is-on .po-radio { border-color: #fff; background: radial-gradient(#fff 0 45%, #1c4268 50%); }
 .po-panel h2 { padding-bottom: 14px; border-bottom: 1px solid #cfd4dc; margin-bottom: 18px; }
 .po-opt { min-height: 190px; }
+
+/* 평상시: 진행 중인 병목이 없을 때 */
+.bn-calm { display: flex; align-items: center; gap: 12px; margin: 14px; padding: 14px 16px; background: #f6f2ea; border: 1px solid #d9d1bf; border-left: 8px solid #2f9e6a; border-radius: 2px; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35); }
+.bn-calm-mark { flex: none; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: #2f9e6a; color: #fff; }
+.bn-calm b { display: block; font-size: 17px; color: #1d2a3a; }
+.bn-calm span:not(.bn-calm-mark) { display: block; margin-top: 3px; font-size: 13.5px; color: #4a5667; }
+
+/* 운영 기준 비교표: 조치 안 함(현재 상태)과 조치했을 때를 구분해서 보여 준다 */
+.fo-cmp tr.base th, .fo-cmp tr.base td { background: #e9e9e6; color: #4d5560; border-bottom: 2px solid #8a93a0; }
+.fo-cmp tr.base th small { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; color: #6b7480; }
+.fo-cmp tr.cmp-gap td { padding: 6px 12px; background: #1c4268; color: #fff; border-color: #1c4268; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; text-align: left; }
+.fo-cmp tbody tr:not(.base):not(.cmp-gap) td b { display: block; font-size: 17px; color: #1d2430; }
+.fo-cmp .df { display: block; margin-top: 3px; font-size: 12.5px; font-weight: 600; }
+.fo-cmp .df.down { color: #1f6b4a; }
+.fo-cmp .df.up { color: #b3261e; }
+.fo-cmp .df.same { color: #6b7480; font-weight: 500; }
+
+/* 운영 기준 카드: 카드마다 색을 달리해 구분한다 (머리띠 진한 색 + 바탕 옅은 색) */
+.po-opt { --c: #2a5f9e; --t: #e6eefa; --d: #1d4673; background: var(--t); border-color: var(--c); }
+.po-opt:nth-child(2) { --c: #2d7a68; --t: #e4f1ec; --d: #1d5748; }
+.po-opt:nth-child(3) { --c: #a8741f; --t: #f6ecd8; --d: #7a5214; }
+.po-no { background: var(--c); border-bottom-color: var(--c); color: #fff; }
+.po-opt b { color: var(--d); }
+.po-radio { border-color: #fff; background: transparent; }
+.po-opt:hover { border-color: var(--d); box-shadow: 0 4px 12px rgba(15, 35, 60, 0.3); }
+.po-opt.is-on { border: 3px solid var(--d); background: #fff; box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 28%, transparent), 0 4px 12px rgba(15, 35, 60, 0.3); padding: 16px 18px 16px; }
+.po-opt.is-on .po-no { margin: -16px -18px 4px; background: var(--d); border-bottom-color: var(--d); }
+.po-opt.is-on .po-radio { border-color: #fff; background: radial-gradient(#fff 0 45%, transparent 50%); }
+
+/* 승인: 보낸 내용이 표 아래에 쌓인다 */
+.ap-log { list-style: none; margin: 12px 0 0; padding: 0; max-height: 172px; overflow-y: auto; border: 1px solid rgba(160, 205, 240, 0.35); background: rgba(255, 255, 255, 0.06); }
+.ap-log li { display: flex; align-items: baseline; gap: 10px; padding: 7px 12px; font-size: 13.5px; color: #e6eef8; border-top: 1px solid rgba(160, 205, 240, 0.2); }
+.ap-log li:first-child { border-top: 0; }
+.ap-log time { flex: none; font-variant-numeric: tabular-nums; color: #9fb7d1; }
+.ap-log b { margin-left: auto; flex: none; font-size: 12.5px; font-weight: 700; color: #7fd6a8; }
+
+/* 승인: 전부 보낸 뒤 가운데에 나오는 HOME 버튼 */
+.ap-foot { display: flex; justify-content: center; margin-top: 24px; }
+.ap-home { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-width: 200px; height: 52px; padding: 0 28px; border: 2px solid #fff; border-radius: 2px; background: #12304f; color: #fff; font: 700 17px/1 var(--f); letter-spacing: 0.12em; cursor: pointer; }
+.ap-home:hover { background: #fff; color: #12304f; }
+.ap-home:hover svg path { fill: #12304f; stroke: #12304f; }
+.ap-home:focus-visible { outline: 3px solid #a8dcff; outline-offset: 2px; }
+.bn-act .bn-stop { margin-left: auto; }
+.toasts { pointer-events: auto; }

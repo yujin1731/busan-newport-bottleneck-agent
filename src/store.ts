@@ -11,6 +11,7 @@ interface UI {
   maxStep: Step;
   focus: Focus;
   hour: number; // -24 .. 0
+  calm: boolean; // 평상시 화면(경보 전). 시간이 흘러 경보가 올라오면 false
   layers: { flow: boolean; occ: boolean; ships: boolean; cctv: boolean };
   hover: null | { id: string; title: string; lines: string[]; x: number; y: number };
   peek: null | { tid: string; x: number; y: number; seaY: number }; // seaY: 위쪽 터미널 줄 바로 아래 바다의 화면 높이
@@ -39,12 +40,15 @@ interface UI {
   toggleLayer: (k: keyof UI['layers']) => void;
 }
 
+export const CALM_HOUR = -10; // 모든 게이트가 정상인 시각(데이터상 8시간 전까지 정상)
+
 export const useUI = create<UI>((set, get) => ({
   data: null,
   step: 1,
   maxStep: 1,
   focus: 'port',
-  hour: 0,
+  hour: CALM_HOUR, // 처음에는 아무 이상 없는 평상시 상태로 시작한다
+  calm: true,
   layers: { flow: true, occ: false, ships: true, cctv: false },
   hover: null,
   peek: null,
@@ -72,6 +76,7 @@ export const useUI = create<UI>((set, get) => ({
   go: (s) => {
     const p: Partial<UI> = { step: s, hover: null, zoneSel: null, heatTab: null, resultOpen: false, maxStep: Math.max(get().maxStep, s) as Step };
     if (s === 1) Object.assign(p, { focus: 'port', playing: false });
+    if (s >= 2) Object.assign(p, { calm: false, hour: 0 });
     if (s === 2) p.diagView = 'summary';
     if (s === 2) Object.assign(p, { focus: 'DGT', hour: 0, playing: false });
     if (s === 3 && get().step !== 4) p.policyPicked = false;

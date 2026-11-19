@@ -3,8 +3,17 @@ import { useUI } from '../store';
 import { useView } from '../view';
 import { POLICIES, requestPolicy, type PolicyId, type PolicyResult } from '../data/policy';
 
-type Row = { id: PolicyId; label: string; plan: string; wait: string; cost: string; miss: string };
+type Raw = { wait: number | null; cost: number | null; miss: number | null };
+type Row = { id: PolicyId; label: string; plan: string; wait: string; cost: string; miss: string; raw: Raw };
 const n = (v: number) => v.toLocaleString();
+
+// 조치 안 함과 비교한 값: 줄면 파랑, 늘면 빨강으로 숫자 아래에 작게 적는다
+function Diff({ now, base, unit }: { now: number | null; base: number | null; unit: string }) {
+  if (now === null || base === null) return null;
+  const d = Math.round(now - base);
+  if (d === 0) return <small className="df same">변화 없음</small>;
+  return <small className={`df ${d < 0 ? 'down' : 'up'}`}>{d < 0 ? '▼' : '▲'} {n(Math.abs(d))}{unit} {d < 0 ? '감소' : '증가'}</small>;
+}
 
 // 세 가지 운영 기준을 각각 돌린 결과 중 1위 대응안을 한 표로 모은다
 function useCompare(on: boolean) {
@@ -19,7 +28,7 @@ function useCompare(on: boolean) {
       const b = rs[0].candidates.find((x) => x.id === 'BASE');
       if (b) {
         const h0 = Math.max(1, rs[0].horizon.minutes / 60);
-        setBase({ id: 'min_wait', label: '조치 안 함', plan: '별도 조치 없이 지켜봄', wait: b.metrics.wait.value === null ? '-' : `${Math.round(b.metrics.wait.value / h0)}대`, cost: b.metrics.cost.value === null ? '-' : `${n(b.metrics.cost.value)}만 원`, miss: b.metrics.cutoffMiss.value === null ? '-' : `${n(b.metrics.cutoffMiss.value)} TEU` });
+        setBase({ id: 'min_wait', label: '조치 안 함', plan: '별도 조치 없이 지켜봄', wait: b.metrics.wait.value === null ? '-' : `${Math.round(b.metrics.wait.value / h0)}대`, cost: b.metrics.cost.value === null ? '-' : `${n(b.metrics.cost.value)}만 원`, miss: b.metrics.cutoffMiss.value === null ? '-' : `${n(b.metrics.cutoffMiss.value)} TEU`, raw: { wait: b.metrics.wait.value === null ? null : Math.round(b.metrics.wait.value / h0), cost: b.metrics.cost.value, miss: b.metrics.cutoffMiss.value } });
       }
       setRows(rs.map((r, i) => {
         const top = r.recommended ?? r.ranking.find((id) => r.candidates.find((c) => c.id === id)?.feasible !== 'no') ?? 'BASE';
@@ -33,6 +42,7 @@ function useCompare(on: boolean) {
           wait: m.wait.value === null ? '-' : `${Math.round(m.wait.value / h)}대`,
           cost: m.cost.value === null ? '-' : `${n(m.cost.value)}만 원`,
           miss: m.cutoffMiss.value === null ? '-' : `${n(m.cutoffMiss.value)} TEU`,
+          raw: { wait: m.wait.value === null ? null : Math.round(m.wait.value / h), cost: m.cost.value, miss: m.cutoffMiss.value },
         };
       }));
     }).catch(() => { /* 계산 실패 시 표는 비어 있다 */ });
@@ -83,12 +93,13 @@ export function PolicyFolder() {
               <thead><tr><th>운영 기준</th><th>선택되는 대응</th><th>게이트 앞 대기 차량(평균)</th><th>총 추가비용</th><th>마감을 놓치는 물량</th><th /></tr></thead>
               <tbody>
                 {!rows && <tr><td colSpan={6} className="wait">계산 중입니다.</td></tr>}
-                {base && <tr className="base"><th scope="row">{base.label}</th><td className="left">{base.plan}</td><td>{base.wait}</td><td>{base.cost}</td><td>{base.miss}</td><td /></tr>}
-                {rows?.map((r) => (
+                {base && <tr className="base"><th scope="row">{base.label}<small>현재 그대로</small></th><td className="left">{base.plan}</td><td>{base.wait}</td><td>{base.cost}</td><td>{base.miss}</td><td /></tr>}                {rows?.map((r) => (
                   <tr key={r.id}>
                     <th scope="row">{r.label}</th>
                     <td className="left">{r.plan}</td>
-                    <td>{r.wait}</td><td>{r.cost}</td><td>{r.miss}</td>
+                    <td><b>{r.wait}</b>{base && <Diff now={r.raw.wait} base={base.raw.wait} unit="대" />}</td>
+                    <td><b>{r.cost}</b>{base && <Diff now={r.raw.cost} base={base.raw.cost} unit="만 원" />}</td>
+                    <td><b>{r.miss}</b>{base && <Diff now={r.raw.miss} base={base.raw.miss} unit=" TEU" />}</td>
                     <td><button type="button" onClick={() => { setCmp(false); setSel(r.id); }}>선택</button></td>
                   </tr>
                 ))}
