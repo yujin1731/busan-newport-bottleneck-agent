@@ -8,7 +8,7 @@ import { ResultModal } from './ui/ResultModal';
 import { CctvPeek } from './ui/CctvPeek';
 import { HeatPanel } from './ui/IndexTabs';
 import { PolicyFolder } from './ui/PolicyFolder';
-import { ReportModal } from './ui/ReportModal';
+import { ReportModal, DataModal } from './ui/ReportModal';
 import { Splash } from './ui/Splash';
 
 const CALM_HOLD_MS = 13000; // 평상시 화면을 보여 주는 시간
@@ -72,6 +72,7 @@ export default function App() {
       <HeatPanel />
       <PolicyFolder />
       <ReportModal />
+      <DataModal />
       <ResultModal />
       {splash !== 'off' && <Splash phase={splash} />}
     </div>

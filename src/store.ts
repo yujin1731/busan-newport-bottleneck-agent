@@ -18,6 +18,8 @@ interface UI {
   acted: Record<string, number>; // 병목 id → 대응 승인 시각(ms)
   ended: Record<string, number>; // 병목 id → 종료 시각(ms)
   toasts: { key: string; title: string; text: string }[]; // 병목 종료 알림
+  autoEnd: boolean; // 병목 자동 종료(켜면 대응 뒤 정해진 시간이 지나면 스스로 종료)
+  dataOpen: boolean; // 관제 데이터 다운로드 창
   reportOpen: boolean; // 병목 상황 기록 보고서(미리보기·내보내기)
   policyPicked: boolean; // 대응 화면: 운영 기준을 골랐는지(false면 가운데에 대응안 폴더를 띄운다)
   diagView: 'summary' | 'book'; // 진단 화면: 처음에는 요약(표), 탭으로 설명서(책)로 바꾼다
@@ -60,6 +62,8 @@ export const useUI = create<UI>((set, get) => ({
   ended: {},
   toasts: [],
   reportOpen: false,
+  dataOpen: false,
+  autoEnd: false,
   simT: 0,
   playing: false,
   speed: 2,

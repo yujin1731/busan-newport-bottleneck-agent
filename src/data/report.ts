@@ -23,6 +23,7 @@ export interface ReportRecord {
   response: { policy: string; plan: string; type: string; volume: string; parties: string[]; constraints: string[]; decision: string };
   effects: { k: string; a: string; b: string; c: string }[]; // 조치 안 함 / 조치 후 / 변화
   history: { at: string; text: string }[];
+  after: { execAt: string | null; doneAt: string | null; peak: string | null; note: string }; // 사후 확인(실행·종료 뒤에 채워진다)
 }
 
 type Action = { title: string; type: string; volume: { value: number; unit: string }; parties: string[]; constraints: { label: string; detail: string; ok: boolean | null }[] };
@@ -32,7 +33,7 @@ const n = (v: number) => v.toLocaleString();
 export function buildReport(
   b: Bundle,
   st: PortState,
-  o: { policyLabel: string; res: PolicyResult | null; candId: string; action: Action; decision: 'approved' | null | string; history: { at: string; text: string }[] },
+  o: { policyLabel: string; res: PolicyResult | null; candId: string; action: Action; decision: 'approved' | null | string; history: { at: string; text: string }[]; executed?: boolean; ended?: boolean },
 ): ReportRecord {
   const f = buildFacts(b);
   const d = b.diagnosis;
@@ -74,7 +75,19 @@ export function buildReport(
     `게이트 처리량은 ${f.gate.thr}대/시로 평소 범위(${f.gate.usualThr[0]}~${f.gate.usualThr[1]}대/시)여서 게이트 자체의 처리 저하는 아니다.`,
   ];
 
-  const decision = o.decision === 'approved' ? '승인(협의 요청 진행)' : '승인 전(검토 중)';
+  const decision = o.ended ? '승인 후 대응 종료' : o.decision === 'approved' || o.executed ? '승인(협의 요청 진행)' : '승인 전(검토 중)';
+  // 사후 확인: 승인(실행)하면 실행 시각, STOP으로 종료하면 해소 시각·대기 최고치를 시연 시뮬레이션 값으로 채운다
+  const node = `g_${f.terminal}`;
+  const steps = sim?.steps ?? [];
+  const clock = (min: number) => { const [h, m] = time.split(':').map(Number); const t = h * 60 + m + min; return `${String(Math.floor(t / 60) % 24).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; };
+  const okAt = steps.find((s) => (s.queue[node] ?? 0) <= 20);
+  const peakQ = steps.length ? Math.max(...steps.map((s) => s.queue[node] ?? 0)) : null;
+  const after = {
+    execAt: o.executed ? `${date} ${time}` : null,
+    doneAt: o.ended && okAt ? `${date} ${clock(okAt.minute)} (실행 ${Math.floor(okAt.minute / 60)}시간 ${okAt.minute % 60}분 뒤)` : null,
+    peak: o.ended && peakQ !== null ? `${peakQ}대 (${f.terminal} 게이트 앞)` : null,
+    note: o.ended ? '시연 시뮬레이션 기준 값이며, 실제 운영에서는 실측값을 기록한다. 예측과 다른 점은 아직 없다.' : '',
+  };
   return {
     docNo: `PJ-${cutDate}-${f.terminal}-01`,
     writtenAt: st.asOf,
@@ -106,5 +119,6 @@ export function buildReport(
     },
     effects,
     history: o.history,
+    after,
   };
 }

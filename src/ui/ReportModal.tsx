@@ -29,9 +29,16 @@ const DOC_CSS = `
 .rdoc .gap td{border:0;padding:0;height:6px}
 `;
 
-function Doc({ r }: { r: ReportRecord }) {
+// 화면에서는 3쪽으로 나눠 보이고(page 지정), PDF·Word 내보내기는 전체를 한 번에 쓴다(page 없음)
+const PAGES: number[][] = [[0, 1, 2], [3, 4, 5], [6, 7]]; // 0 머리표, 1~7 항목, 7 뒤에 맺음말
+export const REPORT_PAGES = PAGES.length;
+
+function Doc({ r, page }: { r: ReportRecord; page?: number }) {
+  const on = (n: number) => page === undefined || PAGES[page - 1].includes(n);
   return (
-    <div className="rdoc">
+    <div className={`rdoc${page ? ' paged' : ''}`}>
+      {page && page > 1 && <div className="pg-run">병목 상황 기록 보고서 · {r.docNo}</div>}
+      {on(0) && (<>
       <h1>병목 상황 기록 보고서</h1>
       <table>
         <tbody>
@@ -51,9 +58,12 @@ function Doc({ r }: { r: ReportRecord }) {
         </tbody>
       </table>
 
+      </>)}
+      {on(1) && (<>
       <h2>1. 상황 개요</h2>
       <p>{r.overview}</p>
-
+      </>)}
+      {on(2) && (<>
       <h2>2. 병목 구간(장소)</h2>
       <table>
         <thead><tr><th>구분</th>{r.zones.map((z) => <th key={z.label}>{z.label}</th>)}</tr></thead>
@@ -67,10 +77,14 @@ function Doc({ r }: { r: ReportRecord }) {
         <tbody><tr><th>상태</th>{r.path.map((p) => <td key={p.label} className={p.state === '막힘' ? 'bad' : ''}>{p.state}</td>)}</tr></tbody>
       </table>
 
+      </>)}
+      {on(3) && (<>
       <h2>3. 발생 이유</h2>
       <ul>{r.reasons.map((t, i) => <li key={i}>{t}</li>)}</ul>
       {r.excluded.length > 0 && (<><p style={{ marginTop: 4 }}>따져 보고 제외한 다른 가능성</p><ul>{r.excluded.map((t, i) => <li key={i}>{t}</li>)}</ul></>)}
 
+      </>)}
+      {on(4) && (<>
       <h2>4. 영향</h2>
       <table>
         <thead><tr><th>항목</th><th>작성 시각 기준</th><th>평소</th></tr></thead>
@@ -78,6 +92,8 @@ function Doc({ r }: { r: ReportRecord }) {
       </table>
       <p style={{ marginTop: 6 }}>{r.impactNote}</p>
 
+      </>)}
+      {on(5) && (<>
       <h2>5. 대응 처리</h2>
       <table>
         <tbody>
@@ -91,6 +107,8 @@ function Doc({ r }: { r: ReportRecord }) {
       </table>
       {r.history.length > 0 && <ul style={{ marginTop: 6 }}>{r.history.map((h, i) => <li key={i}>{h.at} 담당자 · {h.text}</li>)}</ul>}
 
+      </>)}
+      {on(6) && (<>
       <h2>6. 대응 효과(예측)</h2>
       {r.effects.length > 0 ? (
         <table>
@@ -99,16 +117,20 @@ function Doc({ r }: { r: ReportRecord }) {
         </table>
       ) : <p>계산 중입니다.</p>}
 
+      </>)}
+      {on(7) && (<>
       <h2>7. 사후 확인 (실행 뒤 기록)</h2>
       <table>
         <tbody className="blank">
-          <tr><th style={{ width: 150 }}>대응 실행 시각</th><td /></tr>
-          <tr><th>병목 해소 시각</th><td /></tr>
-          <tr><th>실제 대기 차량 최고치</th><td /></tr>
-          <tr><th>예측과 다른 점·비고</th><td /></tr>
+          <tr><th style={{ width: 150 }}>대응 실행 시각</th><td>{r.after.execAt}</td></tr>
+          <tr><th>병목 해소 시각</th><td>{r.after.doneAt}</td></tr>
+          <tr><th>실제 대기 차량 최고치</th><td>{r.after.peak}</td></tr>
+          <tr><th>예측과 다른 점·비고</th><td>{r.after.note}</td></tr>
         </tbody>
       </table>
       <p className="note">이 기록은 병목이 생긴 장소·시각·지속시간·이유·영향·대응을 남겨, 같은 상황이 다시 생겼을 때 사후 판단에 쓰기 위한 것이다.</p>
+      </>)}
+      {page && <div className="pg-no">{page}</div>}
     </div>
   );
 }
@@ -138,7 +160,7 @@ function printPdf(r: ReportRecord) {
   fr.onload = () => { fr.contentWindow?.focus(); fr.contentWindow?.print(); setTimeout(() => fr.remove(), 60000); };
 }
 
-type Item = { id: string; group: '사진' | '수치'; label: string; build: () => Promise<ZipFile> };
+type Item = { id: string; group: '사진' | '수치'; label: string; file: string; build: () => Promise<ZipFile> };
 const csv = (rows: (string | number)[][]) => rows.map((r) => r.map((x) => (/[",\n]/.test(String(x)) ? `"${String(x).replace(/"/g, '""')}"` : x)).join(',')).join('\r\n');
 const utf8 = (t: string) => new TextEncoder().encode('\ufeff' + t);
 
@@ -151,14 +173,14 @@ function DataPick({ r }: { r: ReportRecord }) {
   const items = useMemo<Item[]>(() => {
     const views = camViews(data, tid, st.gates[`g_${tid}`]?.queue ?? 0);
     const photos: Item[] = views.map((v, i) => ({
-      id: `img${i}`, group: '사진', label: `CCTV 히트맵 · ${v.label} (${v.pct}%)`,
+      id: `img${i}`, group: '사진', label: `CCTV 히트맵 · ${v.label} (${v.pct}%)`, file: `${i + 1}_${v.label}.png`,
       build: async () => ({ name: `사진/${i + 1}_${v.label}.png`, data: await renderCamPng(v, tid, st.asOf) }),
     }));
     const nums: Item[] = [
-      { id: 'gate', group: '수치', label: '시간대별 게이트 대기·TAT·처리량 (최근 24시간)', build: async () => ({ name: '수치/시간대별_게이트.csv', data: utf8(csv([['시각', '대기 차량(대)', 'TAT(분)', '처리량(대/시)', '상태'], ...[...data.hours].sort((a, b) => a - b).map((h) => { const s = data.states[h]; const g = s?.gates[`g_${tid}`]; return [s?.asOf ?? '', g?.queue ?? '', g?.tat ?? '', g?.thr ?? '', g?.state ?? '']; })])) }) },
-      { id: 'zone', group: '수치', label: '구역별 혼잡도·판정', build: async () => ({ name: '수치/구역별_혼잡도.csv', data: utf8(csv([['구역', '혼잡도(%)', '판정'], ...r.zones.map((z) => [z.label, z.pct, z.state])])) }) },
-      { id: 'occ', group: '수치', label: `${tid} 블록별 장치율`, build: async () => ({ name: '수치/블록별_장치율.csv', data: utf8(csv([['블록', '장치율(%)'], ...(data.layout.terminals.find((t) => t.id === tid)?.blocks ?? []).filter((b) => !b.temp).map((b) => [b.id, Math.round((st.occ[b.id] ?? 0) * 100)])])) }) },
-      { id: 'json', group: '수치', label: '병목 기록 보고서 데이터 (JSON)', build: async () => ({ name: '수치/병목기록.json', data: new TextEncoder().encode(JSON.stringify(r, null, 2)) }) },
+      { id: 'gate', group: '수치', label: '시간대별 게이트 대기·TAT·처리량 (최근 24시간)', file: '시간대별_게이트.csv', build: async () => ({ name: '수치/시간대별_게이트.csv', data: utf8(csv([['시각', '대기 차량(대)', 'TAT(분)', '처리량(대/시)', '상태'], ...[...data.hours].sort((a, b) => a - b).map((h) => { const s = data.states[h]; const g = s?.gates[`g_${tid}`]; return [s?.asOf ?? '', g?.queue ?? '', g?.tat ?? '', g?.thr ?? '', g?.state ?? '']; })])) }) },
+      { id: 'zone', group: '수치', label: '구역별 혼잡도·판정', file: '구역별_혼잡도.csv', build: async () => ({ name: '수치/구역별_혼잡도.csv', data: utf8(csv([['구역', '혼잡도(%)', '판정'], ...r.zones.map((z) => [z.label, z.pct, z.state])])) }) },
+      { id: 'occ', group: '수치', label: `${tid} 블록별 장치율`, file: '블록별_장치율.csv', build: async () => ({ name: '수치/블록별_장치율.csv', data: utf8(csv([['블록', '장치율(%)'], ...(data.layout.terminals.find((t) => t.id === tid)?.blocks ?? []).filter((b) => !b.temp).map((b) => [b.id, Math.round((st.occ[b.id] ?? 0) * 100)])])) }) },
+      { id: 'json', group: '수치', label: '병목 기록 보고서 데이터', file: '병목기록.json', build: async () => ({ name: '수치/병목기록.json', data: new TextEncoder().encode(JSON.stringify(r, null, 2)) }) },
     ];
     return [...photos, ...nums];
   }, [data, st, tid, r]);
@@ -172,51 +194,69 @@ function DataPick({ r }: { r: ReportRecord }) {
       save(`병목자료_${tid}_${r.writtenAt.slice(0, 10).replace(/-/g, '')}.zip`, 'application/zip', makeZip(files));
     } finally { setBusy(false); }
   };
-  const box = (g: Item['group']) => items.filter((i) => i.group === g).map((i) => (
-    <label key={i.id}><input type="checkbox" checked={!!sel[i.id]} onChange={(e) => setSel({ ...sel, [i.id]: e.target.checked })} />{i.label}</label>
-  ));
+  const row = (i: Item) => (
+    <li key={i.id}>
+      <label className={sel[i.id] ? 'is-on' : ''}>
+        <input type="checkbox" checked={!!sel[i.id]} onChange={(e) => setSel({ ...sel, [i.id]: e.target.checked })} />
+        <span className={`dl-ico ${i.group === '사진' ? 'img' : 'tbl'}`} aria-hidden="true">{i.file.split('.').pop()?.toUpperCase()}</span>
+        <span className="dl-name"><b>{i.label}</b><small>{i.file}</small></span>
+      </label>
+    </li>
+  );
   return (
-    <section className="rep-data" aria-label="데이터 선택 다운로드">
-      <header>
-        <b>데이터 다운로드</b>
-        <span>필요한 자료만 골라 ZIP 한 파일로 받습니다.</span>
+    <section className="dl-box" aria-label="관제 데이터 다운로드">
+      <div className="dl-head">
+        <span>다운로드할 자료를 선택하십시오. 고른 자료는 ZIP 한 파일로 저장됩니다.</span>
         <button type="button" onClick={() => setSel(all ? {} : Object.fromEntries(items.map((i) => [i.id, true])))}>{all ? '전체 해제' : '전체 선택'}</button>
-      </header>
-      <div className="rep-data-grid">
-        <div><h4>CCTV 사진</h4>{box('사진')}</div>
-        <div><h4>수치 자료</h4>{box('수치')}</div>
       </div>
-      <footer>
-        <button type="button" className="rep-dl" disabled={!picked.length || busy} onClick={download}>{busy ? '만드는 중' : picked.length ? `선택한 ${picked.length}개 다운로드` : '자료를 선택하세요'}</button>
-      </footer>
+      <div className="dl-list">
+        <h4>CCTV 사진</h4>
+        <ul>{items.filter((i) => i.group === '사진').map(row)}</ul>
+        <h4>수치 자료</h4>
+        <ul>{items.filter((i) => i.group === '수치').map(row)}</ul>
+      </div>
+      <div className="dl-foot">
+        <span>{picked.length ? `${picked.length}개 선택됨` : '선택한 자료 없음'}</span>
+        <button type="button" className="dl-cancel" onClick={() => useUI.getState().set({ dataOpen: false })}>취소</button>
+        <button type="button" className="dl-go" disabled={!picked.length || busy} onClick={download}>{busy ? '만드는 중' : '다운로드'}</button>
+      </div>
     </section>
   );
 }
 
-export function ReportModal() {
-  const open = useUI((s) => s.reportOpen);
+// 보고서 내용(보고서 창과 데이터 창이 함께 쓴다)
+function useReportRecord(open: boolean): ReportRecord | null {
   const set = useUI((s) => s.set);
   const policy = useUI((s) => s.policy);
   const simCand = useUI((s) => s.simCand);
   const decision = useUI((s) => s.decision);
   const history = useUI((s) => s.history);
+  const acted = useUI((s) => s.acted);
+  const ended = useUI((s) => s.ended);
   const { data, st } = useView();
   const [res, setRes] = useState<PolicyResult | null>(null);
   useEffect(() => {
     if (!open) return;
     let live = true;
     requestPolicy(policy, data, st.asOf).then((r) => live && setRes(r)).catch(() => undefined);
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && set({ reportOpen: false });
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && set({ reportOpen: false, dataOpen: false });
     window.addEventListener('keydown', onKey);
     return () => { live = false; window.removeEventListener('keydown', onKey); };
   }, [open, policy, data, st.asOf, set]);
-  const r = useMemo(() => {
+  return useMemo(() => {
     if (!open) return null;
     const c = data.cands.candidates.find((x) => x.id === simCand);
     const action = !c || c.id === data.action.id ? data.action : { ...data.action, id: c.id, type: c.type, title: c.label, volume: { value: c.volume, unit: 'TEU' }, constraints: c.constraints, parties: c.parties };
     const pol = POLICIES.find((x) => x.id === policy)?.label ?? '';
-    return buildReport(data, st, { policyLabel: pol, res: res && res.policy === policy ? res : null, candId: simCand, action, decision, history });
-  }, [open, data, st, res, policy, simCand, decision, history]);
+    return buildReport(data, st, { policyLabel: pol, res: res && res.policy === policy ? res : null, candId: simCand, action, decision, history, executed: !!acted[data.diagnosis.alert], ended: !!ended[data.diagnosis.alert] });
+  }, [open, data, st, res, policy, simCand, decision, history, acted, ended]);
+}
+
+// 기록서 창: 병목 상황 기록 보고서(미리보기·PDF·Word)
+export function ReportModal() {
+  const open = useUI((s) => s.reportOpen);
+  const set = useUI((s) => s.set);
+  const r = useReportRecord(open);
   if (!open || !r) return null;
   const stem = `병목기록보고서_${r.terminal}_${r.writtenAt.slice(0, 10).replace(/-/g, '')}`;
   return (
@@ -229,7 +269,26 @@ export function ReportModal() {
         <button type="button" onClick={() => save(`${stem}.json`, 'application/json', JSON.stringify(r, null, 2))}>데이터(JSON)</button>
         <button type="button" className="rep-x" onClick={() => set({ reportOpen: false })} aria-label="닫기">✕</button>
       </div>
-      <div className="rep-scroll"><style>{DOC_CSS}</style><DataPick r={r} /><Doc r={r} /></div>
+      <div className="rep-scroll"><style>{DOC_CSS}</style>{PAGES.map((_, i) => <Doc key={i} r={r} page={i + 1} />)}</div>
+    </div>
+  );
+}
+
+// 데이터 창: 관제 화면 위에 뜨는 대화상자. 관제 데이터(CCTV 사진·수치 자료)를 골라 내려받는다
+export function DataModal() {
+  const open = useUI((s) => s.dataOpen);
+  const set = useUI((s) => s.set);
+  const r = useReportRecord(open);
+  if (!open || !r) return null;
+  return (
+    <div className="dl-overlay" onMouseDown={(e) => e.target === e.currentTarget && set({ dataOpen: false })}>
+      <div className="dl-dialog" role="dialog" aria-modal="true" aria-label="관제 데이터 다운로드">
+        <header>
+          <b>관제 데이터 다운로드</b>
+          <button type="button" onClick={() => set({ dataOpen: false })} aria-label="닫기">✕</button>
+        </header>
+        <DataPick r={r} />
+      </div>
     </div>
   );
 }

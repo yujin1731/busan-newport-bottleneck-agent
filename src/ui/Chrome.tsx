@@ -78,6 +78,29 @@ export function useOv() {
   return { name: tid ?? '전체', tat: Math.round(tat), dTat, occ, alert: occ >= SAT || dTat >= TAT_ALERT };
 }
 
+// 대응이 진행 중인 병목: 직접 STOP을 누르거나, 자동 종료를 켜 두면 정해진 시간 뒤 스스로 종료한다(시연에서는 시간을 줄여 둔다)
+const AUTO_SEC = 8;
+function DoingControls({ id }: { id: string }) {
+  const auto = useUI((s) => s.autoEnd);
+  const set = useUI((s) => s.set);
+  const [left, setLeft] = useState(AUTO_SEC);
+  useEffect(() => {
+    if (!auto) { setLeft(AUTO_SEC); return; }
+    const t = window.setInterval(() => setLeft((v) => v - 1), 1000);
+    return () => window.clearInterval(t);
+  }, [auto]);
+  useEffect(() => { if (auto && left <= 0) endBottleneck(id); }, [auto, left, id]);
+  return (
+    <>
+      <button type="button" role="switch" aria-checked={auto} className={`bn-auto ${auto ? 'is-on' : ''}`} onClick={() => set({ autoEnd: !auto })}>
+        <i aria-hidden="true" />
+        <span>{auto ? `자동 종료 ${Math.max(0, left)}초 전` : '자동 종료'}</span>
+      </button>
+      <button type="button" className="bn-stop" onClick={() => endBottleneck(id)}><i aria-hidden="true" />STOP</button>
+    </>
+  );
+}
+
 // 진행 중인 병목 목록: 동시에 여러 곳에서 병목이 생길 수 있어 한꺼번에 나열한다.
 // 대응을 승인하면 '대응 진행 중'이 되고, STOP으로 직접 마치거나 시간이 지나 자동으로 '종료'가 된다.
 export function OverviewCard() {
@@ -114,7 +137,7 @@ export function OverviewCard() {
               <div className="bn-title">{a.title}</div>
               <div className="bn-act">
                 {done && <span className="bn-state"><Icon name="check" size={14} />혼잡도 정상화</span>}
-                {doing && <button type="button" className="bn-stop" onClick={() => endBottleneck(a.id)}>STOP</button>}
+                {doing && <DoingControls id={a.id} />}
               </div>
             </li>
           );
@@ -129,13 +152,21 @@ export function ToastHost() {
   const toasts = useUI((s) => s.toasts);
   const set = useUI((s) => s.set);
   const step = useUI((s) => s.step);
+  const [okd, setOkd] = useState<Record<string, boolean>>({}); // 확인을 누른 알림
   if (!toasts.length || step !== 1) return null;
   return (
     <div className="toasts is-inline" role="status" aria-live="polite">
       {toasts.map((t) => (
         <div key={t.key} className="toast">
           <b>{t.title}</b>
-          <button type="button" className="toast-rep" onClick={() => set({ reportOpen: true })}>레포트 분석</button>
+          {!okd[t.key] ? (
+            <button type="button" className="toast-ok" onClick={() => setOkd({ ...okd, [t.key]: true })}>확인</button>
+          ) : (
+            <div className="toast-btns">
+              <button type="button" className="toast-rep" onClick={() => set({ reportOpen: true })}>레포트 분석</button>
+              <button type="button" className="toast-rep" onClick={() => set({ dataOpen: true })}>관제 데이터 다운로드</button>
+            </div>
+          )}
           <button type="button" aria-label="알림 닫기" onClick={() => set({ toasts: useUI.getState().toasts.filter((x) => x.key !== t.key) })}>✕</button>
         </div>
       ))}
